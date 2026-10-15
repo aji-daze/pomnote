@@ -1,7 +1,8 @@
 // オフラインで起動できるよう、アプリ本体を端末に保存しておく。
 // アプリを更新したら VERSION を上げる（端末側に「更新があります」と表示される）。
-const VERSION = '1.15.0';
-const CACHE = `pomera-tab-${VERSION}`;
+const VERSION = '1.15.1';
+// 旧アドレス（/pomera-tab/）の版と同じ場所に保存領域があるので、名前を分けて互いに消し合わないようにする
+const CACHE = `pomnote-${VERSION}`;
 const FONT_CACHE = 'pomera-tab-fonts';
 const SHELL = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
@@ -16,7 +17,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     for (const key of await caches.keys()) {
-      if (key.startsWith('pomera-tab-') && key !== CACHE && key !== FONT_CACHE) await caches.delete(key);
+      if (key.startsWith('pomnote-') && key !== CACHE) await caches.delete(key);
     }
     await self.clients.claim();
   })());
