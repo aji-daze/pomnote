@@ -13,7 +13,7 @@ import * as F from './formats.js';
 import { createBookView } from './bookview.js';
 import * as Notify from './notify.js';
 
-const VERSION = '1.15.0'; // sw.js の VERSION と合わせる
+const VERSION = '1.15.1'; // sw.js の VERSION と合わせる
 const $ = (s, root = document) => root.querySelector(s);
 const editor = $('#editor');
 const preview = $('#preview');
