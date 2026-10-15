@@ -1,0 +1,51 @@
+{
+  "name": "pomnote",
+  "short_name": "pomnote",
+  "description": "オフラインで使える、書くことだけの執筆アプリ",
+  "lang": "ja",
+  "id": "pomnote",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fbf9f3",
+  "theme_color": "#23211c",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "新しい原稿",
+      "short_name": "新規",
+      "description": "新しい原稿をすぐ開く",
+      "url": "./?new=doc",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "本棚（読書）",
+      "short_name": "本棚",
+      "description": "取り込んだ本を読む",
+      "url": "./?open=book",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/epub+zip": [".epub"],
+        "text/markdown": [".md"],
+        "text/plain": [".txt"],
+        "text/html": [".html", ".htm"],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"]
+      }
+    }
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}
