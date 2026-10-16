@@ -13,7 +13,7 @@ import * as F from './formats.js';
 import { createBookView } from './bookview.js';
 import * as Notify from './notify.js';
 
-const VERSION = '1.15.2'; // sw.js の VERSION と合わせる
+const VERSION = '1.15.3'; // sw.js の VERSION と合わせる
 const $ = (s, root = document) => root.querySelector(s);
 const editor = $('#editor');
 const preview = $('#preview');
@@ -761,10 +761,7 @@ async function openFiles() {
   await saveNow();
   openPanel('files', 'left');
   S.showTrash = false;
-  // 原稿の置き場所（小説-執筆中）をいちばん先に見せる。開いている原稿がその中にあれば、そのフォルダを開く
-  const home = homeFolder();
-  const cur = S.doc?.folder || '';
-  S.fileDir = home && !(cur === home || cur.startsWith(`${home}/`)) ? home : cur;
+  S.fileDir = ''; // いつも OneDrive のいちばん上から開く（Obsidian・小説-執筆中などへ自由に入れる）
   await renderFiles(true);
 }
 
@@ -833,8 +830,8 @@ async function renderFiles(focusCurrent = false) {
     }
     crumbs.hidden = false;
     const dir = S.fileDir;
-    const parts = dir ? dir.split('/') : [];
     const home = homeFolder();
+    const parts = dir ? dir.split('/') : [];
     if (home && dir !== home) {
       crumbs.append(h('button', { class: 'crumb', title: '原稿の置き場所へ', onclick: () => goTo(home) }, `🏠 ${home.split('/').pop()}`), h('span', { class: 'sep' }, '｜'));
     }
@@ -850,6 +847,11 @@ async function renderFiles(focusCurrent = false) {
         const name = d.folder.slice(prefix.length).split('/')[0];
         sub.set(name, (sub.get(name) || 0) + 1);
       }
+    }
+    // 原稿の置き場所（小説-執筆中）は、まだ空でも一覧に出す（同期はファイルしか運ばないので、空のフォルダは見えないため）
+    if (home && home !== dir && (!dir || home.startsWith(prefix))) {
+      const name = home.slice(prefix.length).split('/')[0];
+      if (!sub.has(name)) sub.set(name, 0);
     }
     if (dir) list.append(folderItem('↑ 上のフォルダへ', parentDir(dir)));
     [...sub.keys()].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true })).forEach((name) => list.append(folderItem(`📁 ${name}`, joinDir(dir, name), sub.get(name))));
