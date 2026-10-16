@@ -13,7 +13,7 @@ import * as F from './formats.js';
 import { createBookView } from './bookview.js';
 import * as Notify from './notify.js';
 
-const VERSION = '1.15.1'; // sw.js の VERSION と合わせる
+const VERSION = '1.15.2'; // sw.js の VERSION と合わせる
 const $ = (s, root = document) => root.querySelector(s);
 const editor = $('#editor');
 const preview = $('#preview');
@@ -761,7 +761,10 @@ async function openFiles() {
   await saveNow();
   openPanel('files', 'left');
   S.showTrash = false;
-  S.fileDir = S.doc?.folder || '';
+  // 原稿の置き場所（小説-執筆中）をいちばん先に見せる。開いている原稿がその中にあれば、そのフォルダを開く
+  const home = homeFolder();
+  const cur = S.doc?.folder || '';
+  S.fileDir = home && !(cur === home || cur.startsWith(`${home}/`)) ? home : cur;
   await renderFiles(true);
 }
 
@@ -831,6 +834,10 @@ async function renderFiles(focusCurrent = false) {
     crumbs.hidden = false;
     const dir = S.fileDir;
     const parts = dir ? dir.split('/') : [];
+    const home = homeFolder();
+    if (home && dir !== home) {
+      crumbs.append(h('button', { class: 'crumb', title: '原稿の置き場所へ', onclick: () => goTo(home) }, `🏠 ${home.split('/').pop()}`), h('span', { class: 'sep' }, '｜'));
+    }
     crumbs.append(h('button', { class: 'crumb', onclick: () => goTo('') }, `☁ ${S.settings.driveName || 'ドライブ'}`));
     parts.forEach((p, i) => crumbs.append(h('span', { class: 'sep' }, '›'), h('button', { class: 'crumb', onclick: () => goTo(parts.slice(0, i + 1).join('/')) }, p)));
 
@@ -847,7 +854,11 @@ async function renderFiles(focusCurrent = false) {
     if (dir) list.append(folderItem('↑ 上のフォルダへ', parentDir(dir)));
     [...sub.keys()].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true })).forEach((name) => list.append(folderItem(`📁 ${name}`, joinDir(dir, name), sub.get(name))));
     files.sort(sorter).forEach((d) => list.append(fileItem(d, false)));
-    if (!sub.size && !files.length) list.append(h('p', { class: 'hint' }, 'このフォルダには、まだ原稿がありません。「＋ 新規」でここに作れます。'));
+    if (!sub.size && !files.length) {
+      list.append(h('p', { class: 'hint' }, dir && dir === homeFolder()
+        ? `「${dir}」には、まだ原稿がありません。「＋ 新規」で書き始めると、同期したときにパソコンの OneDrive の「${dir}」フォルダに入ります。`
+        : 'このフォルダには、まだ原稿がありません。「＋ 新規」でここに作れます。'));
+    }
   };
 
   panel.replaceChildren(
