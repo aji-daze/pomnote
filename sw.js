@@ -1,6 +1,6 @@
 // オフラインで起動できるよう、アプリ本体を端末に保存しておく。
 // アプリを更新したら VERSION を上げる（端末側に「更新があります」と表示される）。
-const VERSION = '1.15.3';
+const VERSION = '1.15.4';
 // 旧アドレス（/pomera-tab/）の版と同じ場所に保存領域があるので、名前を分けて互いに消し合わないようにする
 const CACHE = `pomnote-${VERSION}`;
 const FONT_CACHE = 'pomera-tab-fonts';
