@@ -8,6 +8,7 @@
 import * as db from './db.js';
 import { compactStamp } from './text.js';
 import * as LocalFS from './localfs.js';
+import * as OneDrive from './onedrive.js';
 
 const API = 'https://api.github.com';
 const TEXT_FILE = /\.(md|txt)$/i;
@@ -60,9 +61,11 @@ const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
 const rootOf = (cfg) => (cfg.root || '').replace(/^\/+|\/+$/g, '').replace(/(.)$/, '$1/');
 
 export const isFolderMode = (cfg) => cfg?.mode === 'folder';
+export const isOneDriveMode = (cfg) => cfg?.mode === 'onedrive';
 
 export function isConfigured(cfg) {
   if (isFolderMode(cfg)) return !!cfg.folderName;
+  if (isOneDriveMode(cfg)) return !!cfg.odLinked;
   return !!(cfg && cfg.owner && cfg.repo && cfg.token);
 }
 
@@ -154,7 +157,7 @@ function uniquePath(path, taken) {
 }
 
 async function syncAll(cfg, hooks) {
-  const be = isFolderMode(cfg) ? await LocalFS.backend(cfg) : githubBackend(cfg);
+  const be = isFolderMode(cfg) ? await LocalFS.backend(cfg) : isOneDriveMode(cfg) ? await OneDrive.backend(cfg) : githubBackend(cfg);
   const state = { empty: false, skipped: new Set() };
   const stats = { pushed: 0, pulled: 0, deleted: 0, conflicts: [] };
   const remote = await be.tree(state);
@@ -263,6 +266,7 @@ export async function leaveTomb(doc) {
 
 export async function testConnection(cfg) {
   if (isFolderMode(cfg)) return LocalFS.test(cfg);
+  if (isOneDriveMode(cfg)) return OneDrive.test(cfg);
   const repo = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}`);
   if (!repo.private) return { ok: true, warn: 'このリポジトリは公開（Public）です。原稿が誰でも読める状態になります。' };
   if (repo.permissions && !repo.permissions.push) return { ok: false, warn: 'トークンに書き込み権限（Contents: Read and write）がありません。' };

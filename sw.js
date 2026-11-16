@@ -1,12 +1,12 @@
 // オフラインで起動できるよう、アプリ本体を端末に保存しておく。
 // アプリを更新したら VERSION を上げる（端末側に「更新があります」と表示される）。
-const VERSION = '1.15.4';
+const VERSION = '1.16.0';
 // 旧アドレス（/pomera-tab/）の版と同じ場所に保存領域があるので、名前を分けて互いに消し合わないようにする
 const CACHE = `pomnote-${VERSION}`;
 const FONT_CACHE = 'pomera-tab-fonts';
 const SHELL = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
-  'js/app.js', 'js/db.js', 'js/text.js', 'js/sync.js', 'js/dict.js', 'js/proof.js', 'js/dictview.js', 'js/qr.js', 'js/print.js', 'js/speech.js', 'js/localfs.js', 'js/formats.js', 'js/bookview.js', 'js/notify.js',
+  'js/app.js', 'js/db.js', 'js/text.js', 'js/sync.js', 'js/dict.js', 'js/proof.js', 'js/dictview.js', 'js/qr.js', 'js/print.js', 'js/speech.js', 'js/localfs.js', 'js/formats.js', 'js/bookview.js', 'js/notify.js', 'js/onedrive.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',
 ];
 

@@ -12,8 +12,9 @@ import * as LocalFS from './localfs.js';
 import * as F from './formats.js';
 import { createBookView } from './bookview.js';
 import * as Notify from './notify.js';
+import * as OneDrive from './onedrive.js';
 
-const VERSION = '1.15.4'; // sw.js の VERSION と合わせる
+const VERSION = '1.16.0'; // sw.js の VERSION と合わせる
 const $ = (s, root = document) => root.querySelector(s);
 const editor = $('#editor');
 const preview = $('#preview');
@@ -1979,7 +1980,7 @@ async function openSettings(section) {
   const syncMsg = h('p', { class: 'hint' }, S.syncError ? `前回のエラー：${S.syncError}` : (await db.kvGet('lastSync')) ? `最終同期：${new Date(await db.kvGet('lastSync')).toLocaleString('ja-JP')}` : '');
   const saveSync = async () => { S.sync = { ...cfg, branch: cfg.branch || 'main' }; await db.kvSet('sync', S.sync); setSyncState(Sync.isConfigured(S.sync) ? 'pending' : 'none'); };
   const folderMode = () => cfg.mode === 'folder';
-  const githubBox = h('div', { hidden: folderMode() },
+  const githubBox = h('div', { hidden: folderMode() || cfg.mode === 'onedrive' },
     h('p', { class: 'hint' }, '原稿用の非公開リポジトリと、そのリポジトリだけに書き込めるトークンを入れます。手順はセットアップ手順書を見てください。トークンはこの端末の中にだけ保存されます。'),
     syncInput('owner', 'ユーザー名', { placeholder: '例：aji-daze' }),
     syncInput('repo', 'リポジトリ', { placeholder: '例：pomera-data' }),
@@ -2010,11 +2011,48 @@ async function openSettings(section) {
       title: 'この名前のフォルダは、どの階層にあっても読みません（「、」区切り）。PC の pc/config.json の exclude と同じにしてください',
       oninput: (e) => { cfg.exclude = e.target.value.split(/[、,，]/).map((s) => s.trim()).filter(Boolean); },
     })));
-  const modeSelect = LocalFS.supported() || folderMode()
-    ? field('同期のしかた', h('select', {
-      onchange: (e) => { cfg.mode = e.target.value; githubBox.hidden = folderMode(); folderBox.hidden = !folderMode(); syncMsg.textContent = ''; },
-    }, [['github', 'GitHub 経由（タブレット・スマホ）'], ['folder', 'PC のフォルダを直接（パソコン）']].map(([v, label]) => h('option', { value: v, selected: (cfg.mode || 'github') === v }, label))))
-    : null;
+  // OneDrive に直接つなぐ（ぽちゃ文庫と同じ方式）
+  const odMode = () => cfg.mode === 'onedrive';
+  const odClient = h('input', { type: 'text', value: await OneDrive.getClientId(), autocomplete: 'off', placeholder: '例：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' });
+  const odState = h('p', { class: 'hint' }, cfg.odLinked ? 'OneDrive につながっています。' : 'まだつながっていません。');
+  const odBox = h('div', { hidden: !odMode() },
+    h('p', { class: 'hint' }, 'Microsoft アカウントでサインインして、OneDrive の .md／.txt を直接読み書きします。GitHub のトークンも、パソコンの同期も要りません。ぽちゃ文庫と同じ「クライアント ID」を使えます。'),
+    h('details', {}, h('summary', { class: 'hint' }, '初めての準備（1回だけ）'),
+      h('p', { class: 'hint' }, 'Azure ポータル →「アプリの登録」で、ぽちゃ文庫用に登録したアプリを開き、「認証」→「シングルページ アプリケーション」のリダイレクト URI に次を追加します（末尾の / まで同じに）。'),
+      h('p', { class: 'hint', style: 'user-select:all;word-break:break-all' }, OneDrive.redirectUri()),
+      h('p', { class: 'hint' }, 'そのアプリの「アプリケーション (クライアント) ID」を下に入れます。')),
+    field('クライアント ID', odClient),
+    h('div', { class: 'row' },
+      h('button', {
+        class: 'primary',
+        onclick: async () => {
+          if (!odClient.value.trim()) { odState.textContent = 'クライアント ID を入れてください。'; return; }
+          await OneDrive.setClientId(odClient.value);
+          cfg.mode = 'onedrive';
+          await saveSync();
+          await saveNow();
+          try { await OneDrive.connect(); } catch (e) { odState.textContent = `つなげません：${e.message}`; }
+        },
+      }, cfg.odLinked ? 'つなぎ直す' : 'OneDrive につなぐ'),
+      cfg.odLinked ? h('button', {
+        onclick: async () => {
+          if (!await confirmBox('OneDrive との接続を切りますか？（この端末の原稿は消えません）', '切る')) return;
+          await OneDrive.signOut();
+          cfg.odLinked = false;
+          await saveSync();
+          openSettings('sync');
+        },
+      }, '接続を切る') : null),
+    odState,
+    field('読まないフォルダ', h('input', {
+      type: 'text', value: (cfg.exclude?.length ? cfg.exclude : OneDrive.DEFAULT_EXCLUDE).join('、'),
+      title: 'この名前のフォルダは、どの階層にあっても読みません（「、」区切り）。名前に【要保管】が付くものも読みません',
+      oninput: (e) => { cfg.exclude = e.target.value.split(/[、,，]/).map((s) => s.trim()).filter(Boolean); },
+    })));
+  const modes = [['onedrive', 'OneDrive に直接（スマホ・タブレット・パソコン）'], ['github', 'GitHub 経由'], ...(LocalFS.supported() || folderMode() ? [['folder', 'PC のフォルダを直接（パソコン）']] : [])];
+  const modeSelect = field('同期のしかた', h('select', {
+    onchange: (e) => { cfg.mode = e.target.value; githubBox.hidden = folderMode() || odMode(); folderBox.hidden = !folderMode(); odBox.hidden = !odMode(); syncMsg.textContent = ''; },
+  }, modes.map(([v, label]) => h('option', { value: v, selected: (cfg.mode || 'github') === v }, label))));
 
   // 辞書
   const dictBox = h('div');
@@ -2158,6 +2196,7 @@ async function openSettings(section) {
       modeSelect,
       githubBox,
       folderBox,
+      odBox,
       field('自動同期', select('autoSyncMin', [[2, '2分ごと'], [5, '5分ごと'], [15, '15分ごと'], [60, '1時間ごと'], [0, 'しない（Ctrl+S のときだけ）']])),
       h('div', { class: 'row' },
         h('button', { class: 'primary', onclick: async () => { await saveSync(); toast('保存しました'); } }, '保存'),
@@ -2423,7 +2462,7 @@ async function doSync({ manual = false, force = false } = {}) {
     if (st.pulled) parts.push(`受信${st.pulled}`);
     if (st.deleted) parts.push(`削除${st.deleted}`);
     if (st.conflicts.length) {
-      const other = folder ? 'フォルダ側の版を「(競合 ファイル版 …)」' : 'PC側の版を「(競合 PC版 …)」';
+      const other = folder ? 'フォルダ側の版を「(競合 ファイル版 …)」' : Sync.isOneDriveMode(S.sync) ? 'OneDrive 側の版を「(競合 OneDrive版 …)」' : 'PC側の版を「(競合 PC版 …)」';
       toast(`両方で書き換えられた原稿が${st.conflicts.length}件ありました。${other}として残しました`, 8000, ['一覧', openFiles]);
     } else if (manual || parts.length) {
       toast(parts.length ? `同期しました（${parts.join('・')}）` : '同期済みです', 2000);
@@ -2451,7 +2490,7 @@ function onPulled(id, oldContent, newContent) {
     S.savedContent = newContent;
     if (!focused) editor.blur();
     updateStats();
-    toast(Sync.isFolderMode(S.sync) ? 'フォルダ側（Obsidian など）での変更を取り込みました' : 'PCでの変更を取り込みました', 2500);
+    toast(Sync.isFolderMode(S.sync) ? 'フォルダ側（Obsidian など）での変更を取り込みました' : Sync.isOneDriveMode(S.sync) ? 'OneDrive 側での変更を取り込みました' : 'PCでの変更を取り込みました', 2500);
     if (S.clips.includes(id)) db.get('docs', id).then((d) => d && Notify.showClip(d, { force: true }));
   } else {
     // 取り込む瞬間に書き足していた: 次の同期で両方の版を残す
@@ -2462,7 +2501,7 @@ function onPulled(id, oldContent, newContent) {
 
 async function onTrashed(id) {
   if (S.doc?.id !== id) return;
-  toast(`この原稿は${Sync.isFolderMode(S.sync) ? 'フォルダ' : 'PC'}側で削除されたため、ゴミ箱に移しました`, 5000);
+  toast(`この原稿は${Sync.isFolderMode(S.sync) ? 'フォルダ' : Sync.isOneDriveMode(S.sync) ? 'OneDrive ' : 'PC'}側で削除されたため、ゴミ箱に移しました`, 5000);
   await openFallback();
 }
 
@@ -2808,6 +2847,12 @@ async function start() {
   setSyncState(Sync.isConfigured(S.sync) ? 'pending' : 'none');
   db.requestPersist();
 
+  const od = await OneDrive.finishSignIn(); // OneDrive のサインインから戻ってきたとき
+  if (od) {
+    S.sync = { ...S.sync, mode: 'onedrive', odLinked: od.ok };
+    await db.kvSet('sync', S.sync);
+    toast(od.ok ? 'OneDrive につながりました。原稿を読み込みます' : `OneDrive につなげませんでした：${od.message}`, od.ok ? 4000 : 9000);
+  }
   if (!await handleLaunchParams()) {
     // 前に書いていた原稿を、前に書いていた場所（カーソルの位置）から開く
     const lastId = await db.kvGet('lastDocId');
