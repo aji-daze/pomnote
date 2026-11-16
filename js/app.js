@@ -14,7 +14,7 @@ import { createBookView } from './bookview.js';
 import * as Notify from './notify.js';
 import * as OneDrive from './onedrive.js';
 
-const VERSION = '1.16.0'; // sw.js の VERSION と合わせる
+const VERSION = '1.16.1'; // sw.js の VERSION と合わせる
 const $ = (s, root = document) => root.querySelector(s);
 const editor = $('#editor');
 const preview = $('#preview');
@@ -628,6 +628,37 @@ async function setGoal(id) {
   if (S.doc?.id === id) { S.doc.goal = goal; updateStats(); }
 }
 
+// 端末の「ファイルを選ぶ」画面から原稿を開く。Android では、OneDrive アプリが入っていれば OneDrive の中も選べる（ぽちゃ文庫と同じ方式）。
+// 選んだファイルの写しを原稿として取り込む。元のファイルは書き換えない
+function pickDeviceFiles() {
+  // accept は付けない（.md は種類が決まっておらず、付けると Android で選べなくなることがある）
+  const input = h('input', { type: 'file', multiple: true, hidden: true, onchange: () => { importDeviceFiles([...input.files]); input.remove(); } });
+  document.body.append(input);
+  input.click();
+}
+
+async function importDeviceFiles(files) {
+  let last = null;
+  const skipped = [];
+  for (const file of files) {
+    const m = file.name.match(/^(.*)\.(md|markdown|txt|text)$/i);
+    if (!m || file.size > 5 * 1024 * 1024) { skipped.push(file.name); continue; }
+    const content = F.decodeText(new Uint8Array(await file.arrayBuffer())).replace(/\r\n?/g, '\n');
+    const ext = /^t/i.test(m[2]) ? '.txt' : '.md';
+    const folder = S.panel === 'files' && S.fileDir ? S.fileDir : homeFolder();
+    const d = Sync.newDoc({ folder, name: await uniqueName(folder, T.safeName(m[1]) || '無題', ext), ext, content });
+    d.caret = 0;
+    await db.put('docs', d);
+    last = d;
+  }
+  if (skipped.length) toast(`開けないファイルを飛ばしました（.md／.txt で 5MB まで）：${skipped.slice(0, 3).join('、')}`, 6000);
+  if (!last) return;
+  S.unsynced = true;
+  closePanel();
+  await openDoc(last.id);
+  if (!skipped.length) toast(files.length > 1 ? `${files.length}件を取り込みました` : `「${last.name}」を取り込みました（元のファイルは変わりません）`, 3500);
+}
+
 async function shareDoc(id) {
   if (S.doc?.id === id) await saveNow();
   const d = await db.get('docs', id);
@@ -868,6 +899,7 @@ async function renderFiles(focusCurrent = false) {
     panelHead(S.showTrash ? 'ゴミ箱' : 'ファイル'),
     h('div', { class: 'panel-tools' },
       S.showTrash ? null : h('button', { class: 'primary', onclick: newDocDialog }, '＋ 新規'),
+      S.showTrash ? null : h('button', { title: '端末や OneDrive にある .md／.txt を選んで、原稿として取り込みます', onclick: pickDeviceFiles }, '端末・OneDriveから開く'),
       S.showTrash ? null : h('button', {
         onclick: async () => {
           const r = await form('新しいフォルダ', [{ key: 'name', label: `「${S.fileDir || S.settings.driveName}」の中に作るフォルダの名前`, value: '' }], '作成');
@@ -2049,7 +2081,7 @@ async function openSettings(section) {
       title: 'この名前のフォルダは、どの階層にあっても読みません（「、」区切り）。名前に【要保管】が付くものも読みません',
       oninput: (e) => { cfg.exclude = e.target.value.split(/[、,，]/).map((s) => s.trim()).filter(Boolean); },
     })));
-  const modes = [['onedrive', 'OneDrive に直接（スマホ・タブレット・パソコン）'], ['github', 'GitHub 経由'], ...(LocalFS.supported() || folderMode() ? [['folder', 'PC のフォルダを直接（パソコン）']] : [])];
+  const modes = [['github', 'GitHub 経由'], ['onedrive', 'OneDrive に直接（Azure のアプリ登録が必要）'], ...(LocalFS.supported() || folderMode() ? [['folder', 'PC のフォルダを直接（パソコン）']] : [])];
   const modeSelect = field('同期のしかた', h('select', {
     onchange: (e) => { cfg.mode = e.target.value; githubBox.hidden = folderMode() || odMode(); folderBox.hidden = !folderMode(); odBox.hidden = !odMode(); syncMsg.textContent = ''; },
   }, modes.map(([v, label]) => h('option', { value: v, selected: (cfg.mode || 'github') === v }, label))));
